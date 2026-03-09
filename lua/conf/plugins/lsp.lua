@@ -3,62 +3,224 @@ return {
   dependencies = {
     "williamboman/mason.nvim",
     "williamboman/mason-lspconfig.nvim",
-    "saghen/blink.cmp", -- Link LSP to Blink
+    "saghen/blink.cmp",
   },
 
   config = function()
-    -- Keep your awesome keybindings!
+    -- ============================================================
+    -- LSP KEYBINDINGS (These fire when LSP attaches to a buffer)
+    -- ============================================================
     vim.api.nvim_create_autocmd('LspAttach', {
       desc = 'LSP actions',
       callback = function(event)
         local opts = {buffer = event.buf}
+        
+        -- Navigation
         vim.keymap.set('n', 'K', '<cmd>lua vim.lsp.buf.hover()<cr>', opts)
         vim.keymap.set('n', '<leader>k', '<cmd>lua vim.diagnostic.open_float()<cr>', opts)
         vim.keymap.set('n', 'gd', '<cmd>lua vim.lsp.buf.definition()<cr>', opts)
         vim.keymap.set('n', 'gD', '<cmd>lua vim.lsp.buf.declaration()<cr>', opts)
         vim.keymap.set('n', 'gi', '<cmd>lua vim.lsp.buf.implementation()<cr>', opts)
         vim.keymap.set('n', 'gr', '<cmd>lua vim.lsp.buf.references()<cr>', opts)
+        
+        -- Refactoring
         vim.keymap.set('n', '<F2>', '<cmd>lua vim.lsp.buf.rename()<cr>', opts)
         vim.keymap.set('n', '<F4>', '<cmd>lua vim.lsp.buf.code_action()<cr>', opts)
+        
+        -- Diagnostics
+        vim.keymap.set('n', '[d', '<cmd>lua vim.diagnostic.goto_prev()<cr>', opts)
+        vim.keymap.set('n', ']d', '<cmd>lua vim.diagnostic.goto_next()<cr>', opts)
       end,
     })
 
-	require("mason").setup({
+    -- ============================================================
+    -- MASON: Your custom setup
+    -- ✅ Already installed:
+    --   - ruff (Python linter, FAST)
+    --   - basedpyright (stricter than pyright, good for ML)
+    --   - clang-format (C/C++ formatter)
+    --   - clangd_codelldb (clangd + debugger integrated)
+    --   - debugpy (Python debugger)
+    --   - rust-analyzer (Rust LSP)
+    --
+    -- 💡 CONSIDER ADDING:
+    --   - lua-language-server (for your Neovim config)
+    --   - black (Python formatter, pairs well with ruff)
+    -- ============================================================
+    require("mason").setup({
       ensure_installed = {
-        "clangd",
-        "rust-analyzer",
-        "pyright",
-        "codelldb", -- Debugger for C/C++/Rust
-        "debugpy",  -- Debugger for Python
+        -- You already have:
         "clang-format",
         "ruff",
-	  },
-	})
+        "rust-analyzer",
+        "debugpy",
+        -- basedpyright via custom setup below
+        -- clangd_codelldb via custom setup below
+        
+        -- Worth adding:
+        "lua-language-server",  -- For your Neovim config files
+        -- "black",              -- Optional: Python formatter (ruff can format too)
+      },
+    })
 
-    -- This tells LSP servers that Blink is handling the menu
+    -- ============================================================
+    -- Get capabilities from Blink for all servers
+    -- ============================================================
     local capabilities = require('blink.cmp').get_lsp_capabilities()
 
+    -- ============================================================
+    -- MASON-LSPCONFIG: Auto-setup servers
+    -- ============================================================
     require("mason-lspconfig").setup({
       handlers = {
+        -- Default handler: Just set capabilities
         function(server_name)
           require("lspconfig")[server_name].setup({
-            capabilities = capabilities -- Crucial for Blink!
+            capabilities = capabilities,
           })
         end,
         
-        -- Dedicated setup for C/C++
+        -- ============================================================
+        -- CLANGD: Your clangd_codelldb setup (C/C++)
+        -- Optimized for embedded development
+        -- ============================================================
         ["clangd"] = function()
           require("lspconfig").clangd.setup({
             capabilities = capabilities,
             cmd = {
               "clangd",
               "--background-index",
-              "--clang-tidy",
-              "--header-insertion=never", -- Stops it from adding random #includes
+              "--header-insertion=never",
+              "--query-driver=C:\\Users\\ah\\AVR\\avr8-gnu-toolchain\\bin\\avr-gcc.exe",
             },
+          })
+        end,
+        -- ============================================================
+        -- RUST-ANALYZER: For FLUX Runtime
+        -- ============================================================
+        ["rust_analyzer"] = function()
+          require("lspconfig").rust_analyzer.setup({
+            capabilities = capabilities,
+            cmd = { "rust-analyzer" },
+            settings = {
+              ["rust-analyzer"] = {
+                cargo = {
+                  allFeatures = true,
+                  loadOutDirsFromCheck = true,
+                  runBuildScripts = true,
+                },
+                procMacro = {
+                  enable = true,
+                },
+                checkOnSave = {
+                  command = "clippy",
+                  extraArgs = { "--all-targets" },
+                },
+                inlayHints = {
+                  enable = true,
+                  chainingHints = true,
+                  parameterHints = true,
+                  typeHints = true,
+                },
+              }
+            },
+            on_attach = function(client, bufnr)
+              -- Format with rustfmt on save
+              vim.api.nvim_create_autocmd("BufWritePre", {
+                buffer = bufnr,
+                callback = function()
+                  vim.lsp.buf.format()
+                end
+              })
+            end,
+          })
+        end,
+        
+        -- ============================================================
+        -- BASEDPYRIGHT: You chose this for good reason!
+        -- It's MORE STRICT than pyright - better for catching bugs
+        -- Perfect for ML code where precision matters
+        -- ============================================================
+        ["basedpyright"] = function()
+          require("lspconfig").basedpyright.setup({
+            capabilities = capabilities,
+            settings = {
+              basedpyright = {
+                -- Analysis mode: stricter = catch more bugs
+                analysis = {
+                  typeCheckingMode = "strict",  -- Catch all type errors
+                  diagnosticMode = "openFilesOnly", -- Only check open files (faster)
+                  -- Add paths to your ML/FLUX modules
+                  extraPaths = {
+                    vim.fn.expand("~/FLUX/models"),
+                    vim.fn.expand("~/FLUX/quantization"),
+                    vim.fn.expand("~/FLUX/runtime"),
+                  },
+                },
+                -- Ruff integration (you have ruff!)
+                linting = {
+                  enabled = true,
+                  ruffEnabled = true,  -- Use YOUR ruff installation
+                },
+              }
+            },
+            on_attach = function(client, bufnr)
+              -- Format on save - use ruff (fastest Python formatter)
+              vim.api.nvim_create_autocmd("BufWritePre", {
+                buffer = bufnr,
+                callback = function()
+                  -- Use ruff to format if available
+                  -- vim.fn.executable() works cross-platform (Windows, Linux, Mac)
+                  if vim.fn.executable("ruff") == 1 then
+                    vim.cmd("!ruff format %")
+                  end
+                end
+              })
+            end,
+          })
+        end,
+        
+        -- ============================================================
+        -- LUA: For your Neovim config
+        -- ============================================================
+        ["lua_ls"] = function()
+          require("lspconfig").lua_ls.setup({
+            capabilities = capabilities,
+            settings = {
+              Lua = {
+                workspace = {
+                  library = vim.api.nvim_get_runtime_file("", true),
+                  checkThirdParty = false,
+                },
+                diagnostics = {
+                  globals = { 'vim' },
+                },
+              }
+            }
           })
         end,
       },
     })
+
+    -- ============================================================
+    -- DIAGNOSTIC SETTINGS
+    -- ============================================================
+    vim.diagnostic.config({
+      underline = true,
+      virtual_text = { prefix = '●' },
+      float = {
+        border = 'rounded',
+        focusable = false,
+      },
+      signs = {
+        text = {
+          [vim.diagnostic.severity.ERROR] = ' ',
+          [vim.diagnostic.severity.WARN] = ' ',
+          [vim.diagnostic.severity.HINT] = ' ',
+          [vim.diagnostic.severity.INFO] = ' ',
+        }
+      }
+    })
+
   end
 }
