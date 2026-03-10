@@ -133,3 +133,7 @@ vim.cmd("autocmd BufEnter * setlocal formatoptions-=cro")
 -- Makes command mode cleaner and less cluttered
 -- ============================================================
 vim.opt.shortmess:append "c"
+
+
+vim.g.loaded_perl_provider = 0
+vim.g.loaded_ruby_provider = 0
