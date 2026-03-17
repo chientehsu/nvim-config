@@ -31,6 +31,16 @@ keymap("n", "<C-d>", "<C-d>zz", opts)
 keymap("n", "<C-u>", "<C-u>zz", opts)
 
 -- ============================================================
+-- QUICK ESCAPE BINDINGS
+-- ============================================================
+-- Exit Insert mode by quickly rolling jk or kj
+vim.keymap.set("i", "jk", "<ESC>", { noremap = true, silent = true, desc = "Quick Escape (jk)" })
+vim.keymap.set("i", "kj", "<ESC>", { noremap = true, silent = true, desc = "Quick Escape (kj)" })
+
+-- Exit Visual mode by pressing v again
+vim.keymap.set("v", "v", "<ESC>", { noremap = true, silent = true, desc = "Exit Visual Mode" })
+
+-- ============================================================
 -- 2. BUFFER MANAGEMENT (Open Files)
 -- ============================================================
 -- Shift + L/H to cycle through your open tabs/buffers
@@ -260,7 +270,12 @@ local function smart_build()
             end
 
             if is_avr then
-                print("Detected AVR code... use <leader>af to flash.")
+                print("🔨 Compiling AVR Code (Generating .elf and .hex)...")
+                local full_cmd = string.format(
+                    "cd '%s' ; avr-gcc -Wall -Os -mmcu=attiny85 -o %s.elf %s ; avr-objcopy -j .text -j .data -O ihex %s.elf %s.hex",
+                    file_dir, file_name, file_path, file_name, file_name
+                )
+                require("toggleterm").exec(full_cmd)
             else
                 print("⚙️  Compiling standard C file for PC...")
                 require("toggleterm").exec(string.format("cd '%s' ; gcc -O2 %s -o %s && .\\%s", file_dir, file_full, file_name, file_name))
@@ -330,21 +345,22 @@ end
 vim.keymap.set('n', '<leader>sr', stm32_revision_build, { desc = "Build Custom STM32 Revision" })
 
 -- ============================================================
--- 12.2 DEDICATED AVR FLASH BACKUP (<leader>af)
+-- 12.2 DEDICATED AVR BUILD BACKUP (<leader>af)
 -- ============================================================
 vim.keymap.set('n', '<leader>af', function()
     local file_path = vim.fn.expand('%:p')
     local file_dir = vim.fn.expand('%:p:h')
     local file_name = vim.fn.expand('%:t:r')
     
-    print("⚡ Flashing AVR via Atmel-ICE...")
-    -- Compiles ATTiny85 code, turns it into a hex file, and flashes it via avrdude
+    print("🔨 Compiling AVR Code (Generating .elf and .hex)...")
+    
+    -- Compiles the code and turns it into a hex file, but STOPS before flashing
     local full_cmd = string.format(
-        "cd '%s' ; avr-gcc -Wall -Os -mmcu=attiny85 -o %s.elf %s ; avr-objcopy -j .text -j .data -O ihex %s.elf %s.hex ; avrdude -c atmelice_isp -p attiny85 -U flash:w:%s.hex:i",
-        file_dir, file_name, file_path, file_name, file_name, file_name
+        "cd '%s' ; avr-gcc -Wall -Os -mmcu=attiny85 -o %s.elf %s ; avr-objcopy -j .text -j .data -O ihex %s.elf %s.hex",
+        file_dir, file_name, file_path, file_name, file_name
     )
     require("toggleterm").exec(full_cmd)
-end, { desc = "Build and Flash ATTiny85" })
+end, { desc = "Build AVR" })
 
 -- ============================================================
 -- 13. COMPILE WITH OPTIMIZATION FLAGS
